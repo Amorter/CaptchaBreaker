@@ -230,3 +230,98 @@ impl ChineseClick0 {
             .collect()
     }
 }
+
+pub struct Slide0;
+
+impl Slide0 {
+    pub fn run(target_image: &DynamicImage, background_image: &DynamicImage) -> Result<SlideBBox, Box<dyn Error>> {
+        // if background_image.width() < target_image.width() {
+        //     return Err("背景图片的宽度必须大于等于目标图片的高度")
+        // }
+        //
+        // if background_image.height() < target_image.height() {
+        //     return Err("背景图片的高度必须大于等于目标图片的高度");
+        // }
+        let target_image = target_image.to_rgba8();
+
+        // 裁剪图片，只保留不透明部分
+        let width = target_image.width();
+        let height = target_image.height();
+        let mut start_x = width;
+        let mut start_y = height;
+        let mut end_x = 0;
+        let mut end_y = 0;
+
+        for x in 0..width {
+            for y in 0..height {
+                let p = target_image[(x, y)];
+
+                if p[3] != 0 {
+                    if x < start_x {
+                        start_x = x;
+                    }
+
+                    if y < start_y {
+                        start_y = y;
+                    }
+
+                    if x > end_x {
+                        end_x = x;
+                    }
+
+                    if y > end_y {
+                        end_y = y;
+                    }
+                }
+            }
+        }
+
+        let cropped_image = if start_x > end_x || start_y > end_y {
+            // 没有任何不透明的像素
+            target_image
+        } else {
+            image::imageops::crop_imm(
+                &target_image,
+                start_x,
+                start_y,
+                end_x - start_x + 1,
+                end_y - start_y + 1,
+            )
+                .to_image()
+        };
+
+        // 图片转换到灰度图
+        let target_image = image::imageops::grayscale(&cropped_image);
+
+        // 使用 canny 进行边缘检测。然后对背景图片进行同样的处理
+        // 接着，使用 match_template 函数进行模板匹配，得到匹配结果矩阵
+        // 然后使用 find_extremes 函数找到结果矩阵中的最大值和最小值
+        // 并得到最大值所在的位置 loc，根据目标图片的大小和 loc 计算出目标物体的位置信息
+        let target_image = imageproc::edges::canny(&target_image, 100.0, 200.0);
+        let background_image = imageproc::edges::canny(&background_image.to_luma8(), 100.0, 200.0);
+        let result =
+            imageproc::template_matching::find_extremes(&imageproc::template_matching::match_template(
+                &background_image,
+                &target_image,
+                imageproc::template_matching::MatchTemplateMethod::CrossCorrelationNormalized,
+            ));
+
+        Ok(SlideBBox {
+            target_y: start_y,
+            x1: result.max_value_location.0,
+            y1: result.max_value_location.1,
+            x2: result.max_value_location.0 + target_image.width(),
+            y2: result.max_value_location.1 + target_image.height(),
+        })
+    }
+}
+
+
+#[derive(Debug, Clone, Copy)]
+pub struct SlideBBox {
+    pub target_y: u32,
+    pub x1: u32,
+    pub y1: u32,
+    pub x2: u32,
+    pub y2: u32,
+}
