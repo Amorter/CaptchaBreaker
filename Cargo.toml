@@ -23,6 +23,7 @@ reqwest = {version = "^0.12.15", features = ["blocking"]}
 num-traits = "0.2.19"
 log = "0.4.27"
 imageproc = "^0.25.0"
+tokio = { version = "1.45.0", features = ["fs", "rt-multi-thread"] }
 
 [features]
 default = ["download-binaries", "chinese_click_0", "slide_0"]
