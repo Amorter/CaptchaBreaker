@@ -29,19 +29,25 @@ fn load_one_model(path: &Path, url: &Url, providers: impl IntoIterator<Item = Ex
 
     if !path.exists() {
         println!("Model not found locally. Downloading from {} to {}...", url.as_str(), path.display());
-        
-        // 创建一个 Tokio 运行时来执行异步下载
-        let rt = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()?;
 
-        // 在 Tokio 运行时中阻塞执行异步下载逻辑
-        model_bytes = rt.block_on(async {
-            download_model_streaming_internal(url, path).await
-        })?;
+        // 检查是否已在运行时中
+        model_bytes = if tokio::runtime::Handle::try_current().is_ok() {
+            // 已在Tokio运行时中，使用现有运行时
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    download_model_streaming_internal(url, path).await
+                })
+            })?
+        } else {
+            // 不在运行时中，创建新运行时
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()?;
+            rt.block_on(async {
+                download_model_streaming_internal(url, path).await
+            })?
+        };
         println!("Model downloaded successfully to {}.", path.display());
-        
-
     } else {
         println!("Loading model from local cache: {}.", path.display());
         model_bytes = fs::read(path)?; // std::fs::read
